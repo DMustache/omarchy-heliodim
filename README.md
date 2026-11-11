@@ -1,0 +1,64 @@
+# heliodim
+
+Laptop screen brightness that follows the sun. One static Zig binary (~230 KB,
+~0.8 MB RSS, one thread) and no dependencies beyond `brightnessctl`.
+It works alongside Omarchy's night light (hyprsunset changes colour, heliodim
+changes brightness).
+
+## How it works
+
+- **Sun**: the same subsolar-point formula Omarchy's Elsewhen clock draws its
+  daylight strip with, so the two agree on sunrise. Clear-sky irradiance is
+  Haurwitz; the curve is `min + (max-min) * sqrt(GHI/1000)`.
+- **Schedule, not polling**: at start it reads `max_brightness`. One step
+  (`step`%, default 1%) becomes a raw delta, e.g. 655 of 65535 on amdgpu.
+  After each change it finds the next minute when the target is one step away
+  and arms a wall-clock `timerfd` for that moment. Nights are a single sleep
+  until dawn. Suspend and clock changes are handled by the timer itself.
+- **Hand changes win**: the kernel raises `POLLPRI` on `actual_brightness`
+  after every set, so brightness keys are seen immediately. Once they stop for
+  2 s, heliodim keeps `pct - curve` as an offset (the curve keeps moving, your
+  correction rides on it). It also appends one line to
+  `~/.local/state/heliodim/events.jsonl`:
+
+  ```json
+  {"t":1794414004,"pct":88.00,"curve":95.00,"offset":-7.00,"elev":-23.75,"az":273.5,"clear":0}
+  ```
+
+  `elev`/`az`/`clear` are the sun's state at that moment, kept as data for
+  learning cloudy-day corrections later. The last offset survives restarts.
+- **Writes** go through `brightnessctl` → logind, so no root or udev rules.
+  Big gaps (start, resume) ramp in at most 10 steps. A screen at 0 is left alone.
+
+## Location
+
+First match wins; nothing goes to the network:
+
+1. `lat` / `lon` in `~/.config/heliodim/config`
+2. the "here" city of the Elsewhen clock (`~/.config/omarchy/shell.json`),
+   while the system time zone is still that city's zone
+3. `omarchy-weather-location --set NAME LAT,LON`
+4. the time zone's reference city (`/etc/localtime` → `zone1970.tab`)
+
+## Config
+
+`~/.config/heliodim/config`, all optional:
+
+```ini
+lat = 55.75
+lon = 37.62
+min = 10      # % at night
+max = 100     # % at the top of the curve
+step = 1      # % per change
+device = amdgpu_bl1
+```
+
+## Install
+
+```sh
+zig build -Drelease --prefix ~/.local
+install -Dm644 systemd/heliodim.service ~/.config/systemd/user/heliodim.service
+systemctl --user enable --now heliodim
+heliodim status
+journalctl --user -u heliodim
+```

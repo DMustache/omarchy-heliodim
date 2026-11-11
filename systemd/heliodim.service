@@ -1,0 +1,12 @@
+[Unit]
+Description=Screen brightness that follows the sun
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/heliodim run
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=graphical-session.target
