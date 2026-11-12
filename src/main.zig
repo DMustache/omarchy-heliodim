@@ -14,9 +14,12 @@ const sun = @import("sun.zig");
 const location = @import("location.zig");
 
 const usage =
-    \\usage: heliodim [run|status]
+    \\usage: heliodim [run|status|pause|reset]
     \\  run     follow the sun (default; meant for the systemd user service)
     \\  status  show location, sun, curve, offset and the next change
+    \\  pause   hand brightness to you until the next sunrise or sunset;
+    \\          run again to resume
+    \\  reset   forget your offset and return to the plain sun curve
     \\
 ;
 
@@ -24,6 +27,8 @@ const usage =
 const settle_ms = 2000;
 /// Ramp size limit when the gap is large (start-up, resume).
 const max_fade_steps = 10;
+/// Sunrise and sunset: refraction plus the sun's radius, as tables use.
+const horizon = -0.833;
 
 const Config = struct {
     lat: ?f64 = null,
@@ -151,11 +156,26 @@ const Engine = struct {
     step_raw: u32,
     /// The hand-set difference from the curve, percentage points.
     offset: f64 = 0,
+    /// When the offset was last set by hand or forgotten, Unix seconds.
+    offset_t: f64 = 0,
+    /// When a pause ends; 0 while following the sun.
+    paused_until: f64 = 0,
+    /// The moment the timer is armed for.
+    next: f64 = 0,
     events_path: [:0]const u8,
+    /// $XDG_RUNTIME_DIR/heliodim.json, which the bar widget reads.
+    state_path: ?[:0]const u8,
+
+    fn paused(e: *const Engine) bool {
+        return e.paused_until != 0;
+    }
+
+    fn elevation(e: *const Engine, t: f64) f64 {
+        return sun.position(e.place.lat, e.place.lon, t).elevation;
+    }
 
     fn curvePct(e: *const Engine, t: f64) f64 {
-        const elev = sun.position(e.place.lat, e.place.lon, t).elevation;
-        return e.cfg.min + (e.cfg.max - e.cfg.min) * sun.level(elev);
+        return e.cfg.min + (e.cfg.max - e.cfg.min) * sun.level(e.elevation(t));
     }
 
     fn pctOf(e: *const Engine, raw: u32) f64 {
@@ -177,6 +197,40 @@ const Engine = struct {
             if (absDiff(e.targetRaw(t), applied) >= e.step_raw) return t;
         }
         return from + 86400;
+    }
+
+    /// The next sunrise or sunset after `from`, to the minute. Polar days and
+    /// nights, which have neither, end a pause after a day.
+    fn nextHorizon(e: *const Engine, from: f64) f64 {
+        const up = e.elevation(from) > horizon;
+        var k: f64 = 1;
+        while (k <= 48 * 60) : (k += 1) {
+            const t = from + 60 * k;
+            if ((e.elevation(t) > horizon) != up) return t;
+        }
+        return from + 86400;
+    }
+
+    /// Arms the timer for the next step, or for the end of a pause.
+    fn arm(e: *Engine, timer: sys.fd_t, applied: u32) !void {
+        e.next = if (e.paused()) e.paused_until else e.nextChange(sys.now(), applied);
+        try sys.timerArm(timer, e.next);
+    }
+
+    /// What the bar widget shows. The widget computes the sun itself from
+    /// lat/lon with the same formula, so this only changes on events.
+    fn writeState(e: *const Engine, applied: u32) void {
+        const path = e.state_path orelse return;
+        var buf: [512]u8 = undefined;
+        const text = std.fmt.bufPrint(&buf,
+            \\{{"pid":{d},"lat":{d:.5},"lon":{d:.5},"source":"{s}","min":{d},"max":{d},"step":{d},"pct":{d:.2},"offset":{d:.2},"offset_t":{d},"next":{d},"paused_until":{d}}}
+            \\
+        , .{
+            linux.getpid(), e.place.lat,      e.place.lon,  e.place.source,
+            e.cfg.min,      e.cfg.max,        e.cfg.step,   e.pctOf(applied),
+            e.offset,       unix(e.offset_t), unix(e.next), unix(e.paused_until),
+        }) catch unreachable;
+        sys.writeFile(path, text) catch |err| std.log.warn("cannot write {s}: {t}", .{ path, err });
     }
 
     /// Moves to `target`, ramping when the gap is several steps. Returns the
@@ -201,13 +255,28 @@ const Engine = struct {
         const curve = e.curvePct(t);
         const pct = e.pctOf(raw);
         e.offset = pct - curve;
+        e.offset_t = t;
         std.log.info("hand change to {d:.1}% (curve {d:.1}%), offset now {d:.1}", .{ pct, curve, e.offset });
 
         var buf: [256]u8 = undefined;
         const line = std.fmt.bufPrint(&buf,
             \\{{"t":{d},"pct":{d:.2},"curve":{d:.2},"offset":{d:.2},"elev":{d:.2},"az":{d:.1},"clear":{d:.0}}}
             \\
-        , .{ @as(i64, @intFromFloat(t)), pct, curve, e.offset, pos.elevation, pos.azimuth, sun.clearSky(pos.elevation) }) catch unreachable;
+        , .{ unix(t), pct, curve, e.offset, pos.elevation, pos.azimuth, sun.clearSky(pos.elevation) }) catch unreachable;
+        e.appendEvent(line);
+    }
+
+    /// Back to the plain curve. Logged too, so a restart does not bring the
+    /// old offset back.
+    fn forget(e: *Engine, t: f64) void {
+        e.offset = 0;
+        e.offset_t = t;
+        std.log.info("offset forgotten", .{});
+        var buf: [64]u8 = undefined;
+        e.appendEvent(std.fmt.bufPrint(&buf, "{{\"t\":{d},\"offset\":0.00,\"reset\":true}}\n", .{unix(t)}) catch unreachable);
+    }
+
+    fn appendEvent(e: *const Engine, line: []const u8) void {
         const fd = sys.open(e.events_path, .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true }, 0o644) catch |err| {
             std.log.warn("cannot write {s}: {t}", .{ e.events_path, err });
             return;
@@ -224,11 +293,9 @@ const Engine = struct {
         var buf: [512]u8 = undefined;
         const take = @min(len, buf.len);
         const tail = std.mem.trimEnd(u8, sys.pread(fd, buf[0..take], len - take) catch return, "\n");
-        const last = tail[if (std.mem.lastIndexOfScalar(u8, tail, '\n')) |i| i + 1 else 0 ..];
-        const key = "\"offset\":";
-        const at = (std.mem.indexOf(u8, last, key) orelse return) + key.len;
-        const end = std.mem.indexOfAnyPos(u8, last, at, ",}") orelse return;
-        e.offset = std.fmt.parseFloat(f64, last[at..end]) catch return;
+        const last = tail[if (std.mem.lastIndexOfScalar(u8, tail, '\n')) |i| i + 1 else 0..];
+        e.offset = jsonNum(last, "offset") orelse return;
+        e.offset_t = jsonNum(last, "t") orelse 0;
     }
 };
 
@@ -236,19 +303,43 @@ fn absDiff(a: u32, b: u32) u32 {
     return if (a > b) a - b else b - a;
 }
 
+fn unix(t: f64) i64 {
+    return @intFromFloat(t);
+}
+
+/// A number field from one flat JSON object heliodim wrote itself.
+fn jsonNum(text: []const u8, comptime key: []const u8) ?f64 {
+    const k = "\"" ++ key ++ "\":";
+    const at = (std.mem.indexOf(u8, text, k) orelse return null) + k.len;
+    const end = std.mem.indexOfAnyPos(u8, text, at, ",}") orelse return null;
+    return std.fmt.parseFloat(f64, std.mem.trim(u8, text[at..end], " ")) catch null;
+}
+
+test jsonNum {
+    const line = "{\"t\":1794414004,\"pct\":88.00,\"offset\":-7.00,\"reset\":true}";
+    try std.testing.expectEqual(@as(?f64, -7), jsonNum(line, "offset"));
+    try std.testing.expectEqual(@as(?f64, 1794414004), jsonNum(line, "t"));
+    try std.testing.expectEqual(@as(?f64, null), jsonNum(line, "pid"));
+}
+
 fn run(io: std.Io, e: *Engine) !void {
     std.log.info("{s}: {d} levels, step {d}% = {d} raw; {d:.4},{d:.4} from {s}; offset {d:.1}", .{
         e.bl.name, e.bl.max, e.cfg.step, e.step_raw, e.place.lat, e.place.lon, e.place.source, e.offset,
     });
     const timer = try sys.timerCreate();
+    // pause/reset from the widget or CLI; TERM/INT clear the state file so the
+    // widget knows heliodim stopped.
+    const signals = try sys.signalsCreate(&.{ .USR1, .USR2, .TERM, .INT });
     e.bl.rearm();
     var applied = try e.apply(io, e.targetRaw(sys.now()));
-    try sys.timerArm(timer, e.nextChange(sys.now(), applied));
+    try e.arm(timer, applied);
+    e.writeState(applied);
 
     var pending: ?u32 = null; // a hand-set value waiting for the keys to go quiet
     var fds = [_]linux.pollfd{
         .{ .fd = e.bl.event_fd, .events = linux.POLL.PRI | linux.POLL.ERR },
         .{ .fd = timer, .events = linux.POLL.IN },
+        .{ .fd = signals, .events = linux.POLL.IN },
     };
     while (true) {
         const ready = try sys.poll(&fds, if (pending != null) settle_ms else -1);
@@ -257,7 +348,8 @@ fn run(io: std.Io, e: *Engine) !void {
                 e.record(v, sys.now());
                 applied = v;
                 pending = null;
-                try sys.timerArm(timer, e.nextChange(sys.now(), applied));
+                try e.arm(timer, applied);
+                e.writeState(applied);
             }
             continue;
         }
@@ -265,14 +357,66 @@ fn run(io: std.Io, e: *Engine) !void {
             e.bl.rearm();
             const v = try e.bl.get();
             // Our own writes read back as `applied`; 0 is a screen switched off.
-            if (v == applied) pending = null else if (v != 0) pending = v;
+            if (v == applied) {
+                pending = null;
+            } else if (v != 0) {
+                // A pause hands the screen to you; nothing is learned from it.
+                if (e.paused()) {
+                    applied = v;
+                    e.writeState(applied);
+                } else pending = v;
+            }
         }
         if (fds[1].revents != 0) {
             sys.timerAck(timer);
-            if (pending == null) applied = try e.apply(io, e.targetRaw(sys.now()));
-            try sys.timerArm(timer, e.nextChange(sys.now(), applied));
+            if (e.paused() and sys.now() >= e.paused_until) e.paused_until = 0;
+            if (pending == null and !e.paused()) applied = try e.apply(io, e.targetRaw(sys.now()));
+            try e.arm(timer, applied);
+            e.writeState(applied);
+        }
+        if (fds[2].revents != 0) {
+            // A hand change still settling is yours: keep it before acting.
+            if (pending) |v| {
+                e.record(v, sys.now());
+                applied = v;
+                pending = null;
+            }
+            while (sys.signalRead(signals)) |sig| {
+                if (sig == @backingInt(linux.SIG.USR1)) {
+                    e.forget(sys.now());
+                } else if (sig == @backingInt(linux.SIG.USR2)) {
+                    e.paused_until = if (e.paused()) 0 else e.nextHorizon(sys.now());
+                    std.log.info("{s}", .{if (e.paused()) "paused" else "resumed"});
+                } else {
+                    if (e.state_path) |p| sys.unlink(p);
+                    return;
+                }
+                if (!e.paused()) applied = try e.apply(io, e.targetRaw(sys.now()));
+            }
+            try e.arm(timer, applied);
+            e.writeState(applied);
         }
     }
+}
+
+/// The pid of a live heliodim daemon, from its state file, checked by name
+/// so a stale pid is never taken for one.
+fn runningPid(state_path: [:0]const u8) ?linux.pid_t {
+    var buf: [512]u8 = undefined;
+    const text = sys.readFile(state_path, &buf) catch return null;
+    const pid: linux.pid_t = @intFromFloat(jsonNum(text, "pid") orelse return null);
+    var pbuf: [32]u8 = undefined;
+    var cbuf: [32]u8 = undefined;
+    const comm = sys.readFile(std.fmt.bufPrintSentinel(&pbuf, "/proc/{d}/comm", .{pid}, 0) catch unreachable, &cbuf) catch
+        return null;
+    return if (std.mem.eql(u8, std.mem.trim(u8, comm, "\n"), "heliodim")) pid else null;
+}
+
+/// `heliodim pause|reset`: signal the running daemon.
+fn control(state_path: ?[:0]const u8, sig: linux.SIG) !void {
+    const path = state_path orelse return fail("XDG_RUNTIME_DIR is not set", .{});
+    const pid = runningPid(path) orelse return fail("heliodim is not running", .{});
+    try sys.kill(pid, sig);
 }
 
 fn status(io: std.Io, e: *Engine) !void {
@@ -309,13 +453,25 @@ pub fn main(init: std.process.Init) !void {
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
     const cmd = if (args.len > 1) args[1] else "run";
-    const is_run = std.mem.eql(u8, cmd, "run");
-    if (!is_run and !std.mem.eql(u8, cmd, "status")) {
+    const Cmd = enum { run, status, pause, reset };
+    const command = std.meta.stringToEnum(Cmd, cmd) orelse {
         std.debug.print(usage, .{});
         std.process.exit(2);
-    }
+    };
 
     const env = init.environ_map;
+    const state_path: ?[:0]const u8 = if (env.get("XDG_RUNTIME_DIR")) |dir|
+        try std.fmt.allocPrintSentinel(arena, "{s}/heliodim.json", .{dir}, 0)
+    else
+        null;
+    if (command == .pause or command == .reset) {
+        control(state_path, if (command == .pause) .USR2 else .USR1) catch |e| switch (e) {
+            error.Reported => std.process.exit(1),
+            else => return e,
+        };
+        return;
+    }
+
     const home = env.get("HOME") orelse return fail("HOME is not set", .{});
     const config_home = env.get("XDG_CONFIG_HOME") orelse try std.fmt.allocPrint(arena, "{s}/.config", .{home});
     const state_home = env.get("XDG_STATE_HOME") orelse try std.fmt.allocPrint(arena, "{s}/.local/state", .{home});
@@ -354,10 +510,16 @@ pub fn main(init: std.process.Init) !void {
         .bl = bl,
         .step_raw = @max(1, @as(u32, @intFromFloat(@round(cfg.step / 100.0 * @as(f64, @floatFromInt(bl.max)))))),
         .events_path = try z(arena, "{s}/events.jsonl", .{state_dir}),
+        .state_path = state_path,
     };
     engine.loadOffset();
 
-    if (!is_run) return status(io, &engine);
+    if (command == .status) return status(io, &engine);
+    // Two daemons would fight over the screen and log every hand change twice.
+    if (state_path) |p| if (runningPid(p)) |pid| if (pid != linux.getpid()) {
+        std.log.err("heliodim is already running (pid {d})", .{pid});
+        std.process.exit(1);
+    };
     try sys.mkdir(try z(arena, "{s}", .{state_home}));
     try sys.mkdir(state_dir);
     run(io, &engine) catch |e| switch (e) {

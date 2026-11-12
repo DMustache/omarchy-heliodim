@@ -5,8 +5,12 @@
   "version": "0.1.0",
   "author": "DMustache",
   "description": "Laptop screen brightness that follows the sun.",
-  "kinds": ["bar-widget"],
-  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "widget/BarWidget.qml"
+  },
   "barWidget": {
     "displayName": "Heliodim",
     "description": "Where the sun stands, and the screen brightness that follows it",

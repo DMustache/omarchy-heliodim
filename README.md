@@ -67,7 +67,12 @@ version too.
 
 ## Install
 
+The repo is both the Omarchy bar plugin and the daemon's source, so one clone
+serves both:
+
 ```sh
+omarchy plugin add https://github.com/DMustache/omarchy-heliodim --enable
+cd ~/.config/omarchy/plugins/dmustache.heliodim
 zig build -Drelease --prefix ~/.local
 install -Dm644 systemd/heliodim.service ~/.config/systemd/user/heliodim.service
 systemctl --user enable --now heliodim
@@ -75,11 +80,36 @@ heliodim status
 journalctl --user -u heliodim
 ```
 
+Without the bar, the last four lines from any clone are enough.
+
+## Bar widget
+
+`widget/BarWidget.qml` shows where the sun stands as a 12×12 pixel icon in
+the bar's text color: stars at night, a sliver at twilight, a half disc at
+sunrise, a disc that climbs, rays near 90°. Mornings put the sun on the left,
+evenings on the right.
+
+- **Left click** opens the panel: today's sky with sunrise, noon and sunset,
+  the brightness on screen against the plain sun curve, your offset, the next
+  step and the location.
+- **Middle click**, or **Pause** in the panel, leaves brightness to you until
+  the next sunrise or sunset; again to resume.
+- **Forget offset** returns to the plain curve.
+
+The daemon writes its state to `$XDG_RUNTIME_DIR/heliodim.json` on every
+change; the widget reads it and computes the sun itself with the same
+formula. The same controls work from a terminal:
+
+```sh
+heliodim pause    # until the next sunrise or sunset; again to resume
+heliodim reset    # forget your offset
+```
+
 ## Art and site
 
 `assets/gen.py` holds the pixel art as text maps: the logo (on the Omarchy
 wordmark's block grid) and the bar icon's sun states, morning and evening.
-It writes `assets/logo.svg`, `assets/sun/*.svg` and the site page.
+It writes `assets/logo.svg`, `assets/sun/*.svg`, `widget/Art.js` and the site page.
 `site/publish.sh` builds the page and pushes it to the `gh-pages` branch;
 the `pages` workflow runs it on every push to `main` that touches `assets/` or `site/`.
 The `ci` workflow builds and tests the binary on every push and pull request.
