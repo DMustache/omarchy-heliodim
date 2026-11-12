@@ -53,6 +53,12 @@ step = 1      # % per change
 device = amdgpu_bl1
 ```
 
+## Requirements
+
+- Zig 0.17, to build the daemon
+- `brightnessctl`, which Omarchy ships, to set brightness through logind
+- a laptop with a built-in backlight under `/sys/class/backlight`
+
 ## Install
 
 The repo is both the Omarchy bar plugin and the daemon's source, so one clone
@@ -69,6 +75,17 @@ journalctl --user -u heliodim
 ```
 
 Without the bar, the last four lines from any clone are enough.
+
+## Uninstall
+
+```sh
+systemctl --user disable --now heliodim
+rm ~/.config/systemd/user/heliodim.service ~/.local/bin/heliodim
+omarchy plugin remove dmustache.heliodim
+```
+
+Your settings and hand-change log stay in `~/.config/heliodim` and
+`~/.local/state/heliodim`; remove those too for a clean slate.
 
 ## Bar widget
 
@@ -101,3 +118,7 @@ It writes `assets/logo.svg`, `assets/sun/*.svg`, `widget/Art.js` and the site pa
 `site/publish.sh` builds the page and pushes it to the `gh-pages` branch;
 the `pages` workflow runs it on every push to `main` that touches `assets/` or `site/`.
 The `ci` workflow builds and tests the binary on every push and pull request.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

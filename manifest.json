@@ -4,6 +4,7 @@
   "name": "Heliodim",
   "version": "0.1.0",
   "author": "DMustache",
+  "license": "MIT",
   "description": "Laptop screen brightness that follows the sun.",
   "kinds": [
     "bar-widget"
