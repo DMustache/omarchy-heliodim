@@ -62,3 +62,10 @@ systemctl --user enable --now heliodim
 heliodim status
 journalctl --user -u heliodim
 ```
+
+## Art and site
+
+`assets/gen.py` holds the pixel art as text maps: the logo (on the Omarchy
+wordmark's block grid) and the bar icon's sun states, morning and evening.
+It writes `assets/logo.svg`, `assets/sun/*.svg` and the site page.
+`site/publish.sh` builds the page and pushes it to the `gh-pages` branch.
