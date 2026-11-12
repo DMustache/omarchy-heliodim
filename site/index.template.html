@@ -159,48 +159,103 @@ footer { max-width: 920px; margin: 0 auto; padding-top: 24px; border-top: 1px so
 @media (prefers-reduced-motion: no-preference) {
   .state .big::after { transition: opacity .2s; }
 }
+/* ---- landing additions */
+.top { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; padding-block: 24px 8px; }
+.top .mark svg { width: 160px; height: auto; }
+.top .intro { flex: 1 1 360px; min-width: 0; display: grid; gap: 16px; }
+.top h1 { font-size: 48px; line-height: 1; letter-spacing: -.01em; }
+.lede { color: var(--fg); font-size: 16px; max-width: 52ch; }
+.cta { display: flex; gap: 10px; flex-wrap: wrap; }
+.cta .btn { flex: none; text-decoration: none; display: inline-block; padding: 8px 16px; }
+.cta .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 500; }
+.cta .btn.primary:hover { background: var(--fg-dim); }
+.facts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 12px; }
+.facts li::before { content: "■ "; color: var(--fg-dim); font-size: 8px; vertical-align: 2px; }
+h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--fg); }
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 28px 32px; }
+.features article { display: grid; gap: 8px; align-content: start; padding-top: 14px; border-top: 1px solid var(--line); min-width: 0; }
+.features p { font-size: 13px; }
+.features code, .chain code, p code { color: var(--fg); font-size: .95em; }
+.chain { margin: 0; padding: 0; list-style: none; counter-reset: c; display: grid; gap: 0; }
+.chain li { counter-increment: c; display: grid; grid-template-columns: 2.5em 1fr; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); color: var(--fg-dim); font-size: 13px; }
+.chain li::before { content: counter(c); color: var(--accent); font-weight: 700; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.two > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.label { color: var(--muted); font-size: 12px; }
+pre.code .c { color: var(--muted); }
 </style>
 </head>
 <body>
-
 <main>
-  <header class="mast">
+  <header class="top">
     <div class="mark px" id="mast-mark"></div>
-    <div>
+    <div class="intro">
       <h1>heliodim</h1>
-      <div class="sub">laptop screen brightness that follows the sun, for Omarchy</div>
-      <div class="links"><a href="https://github.com/DMustache/omarchy-heliodim">source on GitHub</a></div>
+      <p class="lede">Laptop screen brightness that follows the sun, for Omarchy. Bright at noon, dim after dusk, and when you press the brightness keys, your choice stays.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Install</a>
+        <a class="btn" href="https://github.com/DMustache/omarchy-heliodim">Source on GitHub</a>
+      </div>
+      <ul class="facts">
+        <li>one static Zig binary, ~230 KB</li>
+        <li>under 1 MB of memory, one thread</li>
+        <li>no root, no network</li>
+      </ul>
     </div>
   </header>
 
-  <section>
-    <h2>In your bar, real size</h2>
-    <p>The icon sits in the right group like the other status glyphs. It draws in the bar text color, so it follows every theme. The soft strip under it only marks it on this page.</p>
+  <section id="demo">
+    <h2>The sun in your bar</h2>
+    <p>The bar icon shows how high the sun stands where you are: stars at night, a sliver at twilight, a half disc at sunrise, a rayed disc high in the sky. Mornings put the sun on the left, evenings on the right. It draws in the bar's text color, so it fits every Omarchy theme.</p>
     <div class="bars">
       <div class="bar" id="bar1"></div>
       <div class="scroll"><div class="bar x2" id="bar2"></div></div>
-      <div class="bar-note"><span>top: 1× (12 px icon, the theme default)</span><span>bottom: 2× (HiDPI)</span></div>
+      <div class="bar-note"><span>1×: the theme's 12 px icon</span><span>2×: HiDPI</span></div>
     </div>
-  </section>
-
-  <section>
-    <h2>Sun states</h2>
-    <p>The icon shows the sun's elevation, not the brightness: from stars at night, through a sliver at twilight and the half disc at sunrise, up to the rayed disc near 90°. Mornings put the sun on the left, evenings on the right. Each state is shown at 4× and at real size.</p>
     <div class="states" id="states"></div>
     <div class="scrub">
       <div class="scrub-row">
-        <label for="t">Scrub today</label>
+        <label for="t">Move through today</label>
         <input id="t" type="range" min="0" max="1439" step="1">
         <span class="readout" id="readout"></span>
       </div>
-      <div class="example">Example place: Moscow, 55.75° N 37.62° E, local time UTC+3. Scrubbing drives the bar strips and the panel too.</div>
+      <div class="example">Demo place: Moscow, 55.75° N 37.62° E, local time UTC+3. The slider drives the bar, the states and the panel below.</div>
     </div>
   </section>
 
-  <section>
-    <h2>Panel (planned)</h2>
+  <section id="how">
+    <h2>How it works</h2>
+    <div class="features">
+      <article>
+        <h3>The sun</h3>
+        <p>Its position comes from the same subsolar-point formula Omarchy's Elsewhen clock draws its daylight strip with, so both agree on sunrise. Clear-sky light comes from the Haurwitz model, and the brightness curve is <code>min + (max − min) · √(GHI / 1000)</code>: 10° of sun gives about 37% of the range, 30° about 70%.</p>
+      </article>
+      <article>
+        <h3>A schedule, not polling</h3>
+        <p>At start heliodim reads <code>max_brightness</code> and turns one step (1% by default) into raw units, for example 655 of 65535 on amdgpu. After each change it finds the next minute when the target is a whole step away and sleeps on a wall-clock timer until then. A night is a single sleep. Suspend and clock changes wake it on time.</p>
+      </article>
+      <article>
+        <h3>Your hand wins</h3>
+        <p>The kernel signals every brightness change, so the brightness keys are seen at once. After 2 quiet seconds heliodim keeps the difference from the curve as an offset. The curve keeps moving with the sun, and your correction moves with it. The offset survives restarts.</p>
+      </article>
+      <article>
+        <h3>Ready to learn</h3>
+        <p>Each hand change is logged with the sun's state at that moment, to learn cloudy-day corrections later. One line per change in <code>~/.local/state/heliodim/events.jsonl</code>:</p>
+        <pre class="code"><code>{"t":1794414004,"pct":88.00,
+ "curve":95.00,"offset":-7.00,
+ "elev":-23.75,"az":273.5,"clear":0}</code></pre>
+      </article>
+      <article>
+        <h3>Fits Omarchy</h3>
+        <p>Brightness goes through <code>brightnessctl</code> and logind, the same path as Omarchy's brightness keys. Night light (hyprsunset) changes the color, heliodim changes the brightness. Big gaps after resume fade in over at most 10 steps, and a switched-off screen is left alone.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="panel">
+    <h2>Panel (in progress)</h2>
     <div class="stage">
-      <div class="panel" role="group" aria-label="heliodim panel mockup">
+      <div class="panel" role="group" aria-label="heliodim panel preview">
         <div class="hero">
           <div class="mark px" id="hero-mark"></div>
           <div>
@@ -225,39 +280,60 @@ footer { max-width: 920px; margin: 0 auto; padding-top: 24px; border-top: 1px so
         </div>
       </div>
       <div class="notes">
-        <p><b>Hero</b> uses the logo mark at the size other Omarchy panels give their icon, with the sun's state as the meta line.</p>
-        <p><b>Sky</b> plots today's elevation from midnight to midnight. The part above the horizon is the day, the dot is now, and the ticks mark sunrise, noon and sunset. It agrees with the Elsewhen daylight strip because both use the same formula.</p>
-        <p><b>Brightness</b> shows the value on screen. The thin accent mark on the meter is where the sun curve alone would put it; the gap between them is your hand offset.</p>
-        <p><b>Buttons</b>: pause hands brightness back to you until the next sunset or sunrise; forget offset returns to the plain curve. Both are planned.</p>
-        <p class="example">Offset and its note are example values.</p>
+        <p>A left click on the bar icon will open this panel.</p>
+        <p><b>Sky</b> plots today's sun from midnight to midnight. The part above the horizon is the day, the dot is now, and the ticks mark sunrise, noon and sunset.</p>
+        <p><b>Brightness</b> is the value on screen. The thin accent mark on the meter is where the sun curve alone would put it, and the gap between them is your offset.</p>
+        <p><b>Pause</b> hands brightness back to you until the next sunrise or sunset. <b>Forget offset</b> returns to the plain curve.</p>
+        <p class="example">The offset and its note are demo values.</p>
       </div>
     </div>
   </section>
 
-  <section>
-    <h2>Logo</h2>
-    <p>A sundial on the same 15-unit block grid as the Omarchy wordmark: the arch is the dial face and the sky, the triangle is the gnomon, and its stepped shadow points at an hour. Solid ground line underneath, like the wordmark's flat baselines.</p>
-    <div class="logos">
-      <figure><div class="lockup"><div class="px" id="lock-mark"></div><span>heliodim</span></div><figcaption>lockup</figcaption></figure>
-      <figure><div class="px" id="logo-240"></div><figcaption>240 px</figcaption></figure>
-      <figure><div class="px" id="logo-48"></div><figcaption>48 px</figcaption></figure>
-      <figure><div class="px" id="logo-16"></div><figcaption>16 px</figcaption></figure>
-    </div>
+  <section id="location">
+    <h2>Where you are</h2>
+    <p>heliodim takes the first of these it finds. Nothing is sent over the network.</p>
+    <ol class="chain">
+      <li><span><code>lat</code> and <code>lon</code> in <code>~/.config/heliodim/config</code></span></li>
+      <li><span>the “here” city of the Elsewhen clock, while the system time zone is still that city's zone</span></li>
+      <li><span>Omarchy's weather location, set with <code>omarchy-weather-location --set NAME LAT,LON</code></span></li>
+      <li><span>your time zone's reference city, from <code>/etc/localtime</code> and tzdata's <code>zone1970.tab</code></span></li>
+    </ol>
   </section>
 
-  <section>
-    <h2>Get it</h2>
-    <p>One static Zig binary, about 230 KB, under 1 MB of memory. It sleeps until the sun moves the target brightness by one step, and keeps your hand adjustments as an offset from the curve. It writes through brightnessctl, so it needs no root. The bar icon and panel above are in progress.</p>
+  <section id="install">
+    <h2>Install</h2>
+    <p>Needs Zig 0.17 to build and <code>brightnessctl</code> to run, which Omarchy already ships. Built-in laptop screens only for now.</p>
     <pre class="code"><code>git clone https://github.com/DMustache/omarchy-heliodim
 cd omarchy-heliodim
 zig build -Drelease --prefix ~/.local
 install -Dm644 systemd/heliodim.service ~/.config/systemd/user/heliodim.service
-systemctl --user enable --now heliodim
-heliodim status</code></pre>
+systemctl --user enable --now heliodim</code></pre>
+    <div class="two">
+      <div>
+        <h3>Config</h3>
+        <pre class="code"><code><span class="c"># ~/.config/heliodim/config, every key optional</span>
+lat = 55.75
+lon = 37.62
+min = 10      <span class="c"># % at night</span>
+max = 100     <span class="c"># % at the top of the curve</span>
+step = 1      <span class="c"># % per change</span>
+device = amdgpu_bl1</code></pre>
+      </div>
+      <div>
+        <h3>Check it</h3>
+        <pre class="code"><code><span class="c">$ heliodim status</span>
+location   55.7500, 37.6200  (config)
+sun        elevation -23.69°, azimuth 273.4°
+backlight  amdgpu_bl1: 65535/65535 = 100.0%
+curve      10.0%  (min 10%, max 100%)
+offset     0.0  → target 10.0%
+next step  in 1 min</code></pre>
+        <p class="label">Logs: <code>journalctl --user -u heliodim</code></p>
+      </div>
+    </div>
   </section>
 </main>
-<footer><span>heliodim</span><a href="https://github.com/DMustache/omarchy-heliodim">github.com/DMustache/omarchy-heliodim</a></footer>
-
+<footer><span>heliodim</span><a href="https://github.com/DMustache/omarchy-heliodim">github.com/DMustache/omarchy-heliodim</a><span>pixel art on the Omarchy wordmark grid</span></footer>
 <script>
 const ART = /*ART*/null;
 
@@ -314,9 +390,6 @@ function barHTML(svg) {
 const $ = id => document.getElementById(id);
 $("mast-mark").innerHTML = ART.logo;
 $("hero-mark").innerHTML = ART.logo;
-$("lock-mark").innerHTML = ART.logo.replace(/width="240" height="180"/, 'width="48" height="36"');
-for (const [id, w] of [["logo-240", 240], ["logo-48", 48], ["logo-16", 16]])
-  $(id).innerHTML = ART.logo.replace(/width="240" height="180"/, `width="${w}" height="${w * 0.75}"`);
 
 $("states").innerHTML = ART.states.map((s, i) => `
   <div class="state" data-i="${i}">
