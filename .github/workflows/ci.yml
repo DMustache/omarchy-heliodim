@@ -14,8 +14,12 @@ jobs:
         with:
           version: 0.17.0
       - run: zig build test
-      - run: zig build -Drelease
-      - run: ls -l zig-out/bin/heliodim
+      - name: Check bundled Linux binaries
+        run: |
+          for arch in x86_64 aarch64; do
+            zig build -Drelease -Dtarget="${arch}-linux-musl"
+            cmp zig-out/bin/heliodim "bin/heliodim-linux-${arch}"
+          done
 
   art:
     runs-on: ubuntu-latest
