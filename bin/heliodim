@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+case $(uname -m) in
+  x86_64|aarch64) arch=$(uname -m) ;;
+  *) echo "heliodim: unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+plugin_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "${1:-run}" = run ] && command -v systemctl >/dev/null 2>&1 && \
+  systemctl --user --quiet is-active heliodim.service; then
+  exit 0
+fi
+
+exec "$plugin_dir/bin/heliodim-linux-$arch" "$@"
