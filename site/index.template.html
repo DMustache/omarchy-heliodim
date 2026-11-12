@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>heliodim</title>
+<meta name="description" content="Laptop screen brightness that follows the sun, for Omarchy.">
+<link rel="icon" href="__FAVICON__">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap">
+<style>
+/* Layout: one column of sections on an Omarchy theme; every artwork shown at
+   its real size and magnified. Single dark look on purpose: these colors are
+   a theme the icons live in. */
+:root {
+  --bg: #060B1E;          /* theme background, also the bar */
+  --bg-raise: #0b1230;    /* popup surface */
+  --fg: #ffcead;          /* theme foreground: icons and text */
+  --fg-dim: #c9b8a6;
+  --muted: #6d7db6;
+  --accent: #7d82d9;
+  --line: rgba(255, 206, 173, 0.18);
+  --line-strong: rgba(255, 206, 173, 0.4);
+  --glow: rgba(255, 206, 173, 0.55);
+  --mono: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 var(--mono);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 920px; margin: 0 auto; display: grid; gap: 56px; }
+h1, h2 { margin: 0; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; color: var(--fg-dim); max-width: 68ch; }
+section { display: grid; gap: 16px; }
+.px svg { display: block; image-rendering: pixelated; }
+
+/* ---- masthead */
+.mast { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.mast .mark svg { width: 120px; height: auto; }
+.mast h1 { font-size: 40px; letter-spacing: -.01em; }
+.mast .sub { color: var(--muted); }
+
+/* ---- bar strip */
+.bar {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  height: 26px; padding: 0 10px; background: var(--bg);
+  border: 1px solid var(--line); font-size: 13px; overflow: hidden;
+}
+.bar .l, .bar .r { display: flex; gap: 14px; align-items: center; }
+.bar .r { justify-content: flex-end; }
+.bar .ws b { font-weight: 500; }
+.bar .ws span { color: var(--fg-dim); opacity: .75; }
+.slot { width: 22px; height: 26px; display: grid; place-items: center; position: relative; }
+.slot svg { width: 12px; height: 12px; }
+/* A soft strip under our icon marks it among the other glyphs. */
+.slot.ours::after {
+  content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px;
+  background: radial-gradient(ellipse at center, var(--glow) 0%, transparent 72%);
+}
+.bar.x2 .slot.ours::after { left: 4px; right: 4px; bottom: 7px; height: 4px; }
+.glyph { font-size: 12px; color: var(--fg); }
+.bar-note { display: flex; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.bars { display: grid; gap: 10px; }
+.bar.x2 { height: 52px; font-size: 26px; padding: 0 20px; }
+.bar.x2 .slot { width: 44px; height: 52px; }
+.bar.x2 .slot svg { width: 24px; height: 24px; }
+.bar.x2 .glyph { font-size: 24px; }
+.bar.x2 .l, .bar.x2 .r { gap: 28px; }
+.scroll { overflow-x: auto; }
+.scroll > .bar.x2 { min-width: 760px; }
+
+/* ---- states */
+.states { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.state {
+  display: grid; gap: 10px; justify-items: center; padding: 14px 6px 12px;
+  text-align: center;
+}
+.state .big { display: flex; gap: 10px; position: relative; padding-bottom: 12px; }
+/* The current state gets a soft strip of light under its icons. */
+.state .big::after {
+  content: ""; position: absolute; left: 4%; right: 4%; bottom: 0; height: 4px;
+  background: radial-gradient(ellipse at center, var(--glow) 0%, transparent 70%);
+  opacity: 0;
+}
+.state.on .big::after { opacity: 1; }
+.state .big svg { width: 48px; height: 48px; }
+.state .real { display: flex; gap: 8px; }
+.state .real svg { width: 12px; height: 12px; }
+.state .name { font-weight: 500; }
+.state .range { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  .states { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.scrub { display: grid; gap: 8px; }
+.scrub-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+input[type=range] { flex: 1 1 260px; accent-color: var(--accent); min-width: 0; }
+input[type=range]:focus-visible { outline: 1px solid var(--accent); outline-offset: 4px; }
+.readout { font-variant-numeric: tabular-nums; color: var(--fg-dim); }
+
+/* ---- panel mock */
+.stage { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; }
+.panel {
+  width: 360px; max-width: 100%; background: var(--bg-raise);
+  border: 1px solid var(--line-strong); padding: 18px; display: grid; gap: 18px;
+}
+.hero { display: flex; gap: 14px; align-items: center; }
+.hero .mark svg { width: 44px; height: auto; }
+.hero .title { font-weight: 700; font-size: 16px; }
+.hero .meta { color: var(--fg-dim); font-size: 12px; }
+.sky svg { width: 100%; height: auto; display: block; }
+.rows { display: grid; gap: 0; }
+.row {
+  display: flex; justify-content: space-between; gap: 12px; padding: 7px 0;
+  border-top: 1px solid var(--line); font-size: 13px;
+}
+.row .k { color: var(--muted); }
+.row .v { font-variant-numeric: tabular-nums; text-align: right; }
+.meter { height: 6px; background: rgba(255,206,173,.08); position: relative; margin-top: 2px; }
+.meter i { position: absolute; inset: 0 auto 0 0; background: var(--fg); }
+.meter b { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--accent); }
+.actions { display: flex; gap: 8px; }
+.btn {
+  flex: 1; font: inherit; font-size: 13px; color: var(--fg); background: rgba(255,206,173,.04);
+  border: 1px solid var(--line-strong); padding: 7px 10px; cursor: pointer;
+}
+.btn:hover { background: rgba(255,206,173,.08); }
+.btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.notes { flex: 1 1 280px; min-width: 0; display: grid; gap: 12px; }
+.notes p { font-size: 13px; }
+.notes b { color: var(--fg); font-weight: 500; }
+
+/* ---- logo study */
+.logos { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-end; }
+.logos figure { margin: 0; display: grid; gap: 8px; justify-items: start; }
+.logos figcaption { color: var(--muted); font-size: 12px; }
+.logos .lockup { display: flex; gap: 14px; align-items: center; }
+.logos .lockup span { font-weight: 700; font-size: 28px; }
+.paths { display: grid; gap: 4px; font-size: 12px; color: var(--fg-dim); overflow-x: auto; }
+.paths code { white-space: nowrap; }
+.example { color: var(--muted); font-size: 12px; }
+a { color: var(--fg); text-decoration-color: var(--muted); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--fg); }
+a:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.mast .links { margin-top: 6px; font-size: 13px; }
+pre.code {
+  margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--bg-raise);
+  border: 1px solid var(--line); font: 13px/1.6 var(--mono); color: var(--fg);
+}
+footer { max-width: 920px; margin: 0 auto; padding-top: 24px; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .state .big::after { transition: opacity .2s; }
+}
+</style>
+</head>
+<body>
+
+<main>
+  <header class="mast">
+    <div class="mark px" id="mast-mark"></div>
+    <div>
+      <h1>heliodim</h1>
+      <div class="sub">laptop screen brightness that follows the sun, for Omarchy</div>
+      <div class="links"><a href="https://github.com/DMustache/omarchy-heliodim">source on GitHub</a></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>In your bar, real size</h2>
+    <p>The icon sits in the right group like the other status glyphs. It draws in the bar text color, so it follows every theme. The soft strip under it only marks it on this page.</p>
+    <div class="bars">
+      <div class="bar" id="bar1"></div>
+      <div class="scroll"><div class="bar x2" id="bar2"></div></div>
+      <div class="bar-note"><span>top: 1× (12 px icon, the theme default)</span><span>bottom: 2× (HiDPI)</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sun states</h2>
+    <p>The icon shows the sun's elevation, not the brightness: from stars at night, through a sliver at twilight and the half disc at sunrise, up to the rayed disc near 90°. Mornings put the sun on the left, evenings on the right. Each state is shown at 4× and at real size.</p>
+    <div class="states" id="states"></div>
+    <div class="scrub">
+      <div class="scrub-row">
+        <label for="t">Scrub today</label>
+        <input id="t" type="range" min="0" max="1439" step="1">
+        <span class="readout" id="readout"></span>
+      </div>
+      <div class="example">Example place: Moscow, 55.75° N 37.62° E, local time UTC+3. Scrubbing drives the bar strips and the panel too.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Panel (planned)</h2>
+    <div class="stage">
+      <div class="panel" role="group" aria-label="heliodim panel mockup">
+        <div class="hero">
+          <div class="mark px" id="hero-mark"></div>
+          <div>
+            <div class="title">heliodim</div>
+            <div class="meta" id="hero-meta"></div>
+          </div>
+        </div>
+        <div class="sky" id="sky"></div>
+        <div class="rows">
+          <div class="row"><span class="k">brightness</span><span class="v" id="r-bright"></span></div>
+          <div class="row" style="display:block;border-top:0;padding-top:0">
+            <div class="meter"><i id="m-fill"></i><b id="m-curve"></b></div>
+          </div>
+          <div class="row"><span class="k">sun curve</span><span class="v" id="r-curve"></span></div>
+          <div class="row"><span class="k">your offset</span><span class="v">+7.0 · set 09:42, overcast</span></div>
+          <div class="row"><span class="k">next step</span><span class="v" id="r-next"></span></div>
+          <div class="row"><span class="k">location</span><span class="v">Moscow · Elsewhen</span></div>
+        </div>
+        <div class="actions">
+          <button class="btn" type="button" id="b-pause">Pause</button>
+          <button class="btn" type="button">Forget offset</button>
+        </div>
+      </div>
+      <div class="notes">
+        <p><b>Hero</b> uses the logo mark at the size other Omarchy panels give their icon, with the sun's state as the meta line.</p>
+        <p><b>Sky</b> plots today's elevation from midnight to midnight. The part above the horizon is the day, the dot is now, and the ticks mark sunrise, noon and sunset. It agrees with the Elsewhen daylight strip because both use the same formula.</p>
+        <p><b>Brightness</b> shows the value on screen. The thin accent mark on the meter is where the sun curve alone would put it; the gap between them is your hand offset.</p>
+        <p><b>Buttons</b>: pause hands brightness back to you until the next sunset or sunrise; forget offset returns to the plain curve. Both are planned.</p>
+        <p class="example">Offset and its note are example values.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Logo</h2>
+    <p>A sundial on the same 15-unit block grid as the Omarchy wordmark: the arch is the dial face and the sky, the triangle is the gnomon, and its stepped shadow points at an hour. Solid ground line underneath, like the wordmark's flat baselines.</p>
+    <div class="logos">
+      <figure><div class="lockup"><div class="px" id="lock-mark"></div><span>heliodim</span></div><figcaption>lockup</figcaption></figure>
+      <figure><div class="px" id="logo-240"></div><figcaption>240 px</figcaption></figure>
+      <figure><div class="px" id="logo-48"></div><figcaption>48 px</figcaption></figure>
+      <figure><div class="px" id="logo-16"></div><figcaption>16 px</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Get it</h2>
+    <p>One static Zig binary, about 230 KB, under 1 MB of memory. It sleeps until the sun moves the target brightness by one step, and keeps your hand adjustments as an offset from the curve. It writes through brightnessctl, so it needs no root. The bar icon and panel above are in progress.</p>
+    <pre class="code"><code>git clone https://github.com/DMustache/omarchy-heliodim
+cd omarchy-heliodim
+zig build -Drelease --prefix ~/.local
+install -Dm644 systemd/heliodim.service ~/.config/systemd/user/heliodim.service
+systemctl --user enable --now heliodim
+heliodim status</code></pre>
+  </section>
+</main>
+<footer><span>heliodim</span><a href="https://github.com/DMustache/omarchy-heliodim">github.com/DMustache/omarchy-heliodim</a></footer>
+
+<script>
+const ART = /*ART*/null;
+
+const DEG = Math.PI / 180, LAT = 55.75, LON = 37.62, TZ_MIN = 180;
+const MIN = 10, MAX = 100, OFFSET = 7;
+
+// Same math as src/sun.zig and Elsewhen's GlobeModel.js.
+const wrap = x => ((x + 540) % 360 + 360) % 360 - 180;
+function sun(ms) {
+  const n = ms / 86400000 + 2440587.5 - 2451545;
+  const L = ((280.460 + 0.9856474 * n) % 360 + 360) % 360;
+  const g = (((357.528 + 0.9856003 * n) % 360 + 360) % 360) * DEG;
+  const lam = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * DEG;
+  const eps = (23.44 - 0.0000004 * n) * DEG;
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+  const alpha = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam)) / DEG;
+  const h = (((ms / 3600000) % 24) + 24) % 24;
+  const sublon = wrap(-15 * (h - 12) - wrap(L - alpha));
+  const p = LAT * DEG, H = (sublon - LON) * DEG;
+  const cz = Math.sin(p) * Math.sin(dec) + Math.cos(p) * Math.cos(dec) * Math.cos(H);
+  const az = Math.atan2(Math.sin(H) * Math.cos(dec), Math.cos(p) * Math.sin(dec) - Math.sin(p) * Math.cos(dec) * Math.cos(H)) / DEG;
+  return { el: Math.asin(Math.max(-1, Math.min(1, cz))) / DEG, az: (az + 360) % 360 };
+}
+const clear = el => el <= 0 ? 0 : 1098 * Math.sin(el * DEG) * Math.exp(-0.057 / Math.sin(el * DEG));
+const curve = el => MIN + (MAX - MIN) * Math.sqrt(Math.min(1, clear(el) / 1000));
+const bucket = el => el < -6 ? 0 : el < 0 ? 1 : el < 4 ? 2 : el < 15 ? 3 : el < 35 ? 4 : el < 65 ? 5 : 6;
+
+const today = new Date();
+const dayStart = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - TZ_MIN * 60000;
+const WEEKDAY = new Date(dayStart + 43200000).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+const fmt = m => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(Math.floor(m % 60)).padStart(2, "0");
+const at = m => sun(dayStart + m * 60000);
+
+// Today's sky, sampled per minute once.
+const day = Array.from({ length: 1440 }, (_, m) => at(m).el);
+let rise = null, set = null, noon = 0;
+for (let m = 1; m < 1440; m++) {
+  if (day[m - 1] < -0.833 && day[m] >= -0.833) rise = m;
+  if (day[m - 1] >= -0.833 && day[m] < -0.833) set = m;
+  if (day[m] > day[noon]) noon = m;
+}
+
+function iconFor(m) {
+  const s = at(m), st = ART.states[bucket(s.el)];
+  return { s, st, side: s.az < 180 ? "am" : "pm" };
+}
+
+function barHTML(svg) {
+  return `<div class="l"><span class="ws"><b>1</b>&nbsp;&nbsp;<span>2&nbsp;&nbsp;3&nbsp;&nbsp;4</span></span></div>
+    <div>${WEEKDAY} ${"__T__"}</div>
+    <div class="r"><span class="glyph">⋮</span><span class="glyph">◔</span><span class="slot ours px">${svg}</span><span class="glyph">◖</span><span class="glyph">▮</span></div>`;
+}
+
+const $ = id => document.getElementById(id);
+$("mast-mark").innerHTML = ART.logo;
+$("hero-mark").innerHTML = ART.logo;
+$("lock-mark").innerHTML = ART.logo.replace(/width="240" height="180"/, 'width="48" height="36"');
+for (const [id, w] of [["logo-240", 240], ["logo-48", 48], ["logo-16", 16]])
+  $(id).innerHTML = ART.logo.replace(/width="240" height="180"/, `width="${w}" height="${w * 0.75}"`);
+
+$("states").innerHTML = ART.states.map((s, i) => `
+  <div class="state" data-i="${i}">
+    <div class="big px">${s.am}${s.pm}</div>
+    <div class="real px">${s.am}${s.pm}</div>
+    <div class="name">${s.name}</div>
+    <div class="range">${s.label}</div>
+  </div>`).join("");
+
+
+// The sky chart: x is local time, y elevation, the horizon at y=0.
+function skySVG(m) {
+  const W = 320, Hh = 120, top = 14, base = 78, lo = -50, hi = Math.max(20, day[noon] + 8);
+  const y = el => base - (el / hi) * (base - top);
+  const yc = el => Math.min(Hh - 18, y(Math.max(lo, el)));
+  const x = mm => (mm / 1440) * W;
+  let lit = "", night = "";
+  for (let k = 0; k <= 1440; k += 10) {
+    const kk = Math.min(1439, k), pt = `${x(k).toFixed(1)},${yc(day[kk]).toFixed(1)} `;
+    night += pt;
+    lit += `${x(k).toFixed(1)},${Math.min(base, yc(day[kk])).toFixed(1)} `;
+  }
+  const ticks = [rise, noon, set].filter(v => v !== null);
+  const now = at(m);
+  return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Sun elevation today">
+    <polygon points="0,${base} ${lit} ${W},${base}" fill="rgba(255,206,173,.10)"/>
+    <polyline points="${night}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 3"/>
+    <polyline points="${lit}" fill="none" stroke="var(--fg)" stroke-width="1.5"/>
+    <line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--line-strong)" stroke-width="1"/>
+    ${ticks.map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${base}" y2="${base + 5}" stroke="var(--fg-dim)"/>
+      <text x="${x(t)}" y="${Hh - 2}" fill="var(--fg-dim)" font-size="10" font-family="var(--mono)" text-anchor="middle">${fmt(t)}</text>`).join("")}
+    <circle cx="${x(m)}" cy="${yc(now.el)}" r="4" fill="${now.el > 0 ? "var(--fg)" : "var(--bg-raise)"}" stroke="var(--fg)" stroke-width="1.5"/>
+  </svg>`;
+}
+
+let paused = false;
+$("b-pause").addEventListener("click", () => {
+  paused = !paused;
+  $("b-pause").textContent = paused ? "Resume" : "Pause";
+});
+
+function render(m) {
+  const { s, st, side } = iconFor(m);
+  const svg = st[side];
+  $("bar1").innerHTML = barHTML(svg).replace("__T__", fmt(m));
+  $("bar2").innerHTML = barHTML(svg).replace("__T__", fmt(m));
+  document.querySelectorAll(".state").forEach(e => e.classList.toggle("on", +e.dataset.i === bucket(s.el)));
+  const rising = s.az < 180;
+  $("readout").textContent = `${fmt(m)} · ${s.el.toFixed(1)}° · ${st.name} · ${rising ? "rising" : "setting"}`;
+  $("hero-meta").textContent = `sun ${s.el.toFixed(1)}° ${s.el > -0.833 ? (rising ? "rising" : "setting") : "below the horizon"}`;
+  $("sky").innerHTML = skySVG(m);
+  const c = curve(s.el), b = Math.min(100, Math.max(0, c + OFFSET));
+  $("r-bright").textContent = `${b.toFixed(0)}%`;
+  $("r-curve").textContent = `${c.toFixed(1)}%`;
+  $("m-fill").style.width = b + "%";
+  $("m-curve").style.left = c + "%";
+  let next = null;
+  for (let k = m + 1; k < m + 1440; k++) {
+    if (Math.abs(Math.min(100, curve(at(k).el) + OFFSET) - b) >= 1) { next = k - m; break; }
+  }
+  $("r-next").textContent = next === null ? "after midnight" : next > 120 ? `${fmt((m + next) % 1440)} (sunrise)` : `in ${next} min`;
+}
+
+const t = $("t");
+t.value = Math.round(noon - 90);
+t.addEventListener("input", () => render(+t.value));
+render(+t.value);
+</script>
+</body>
+</html>
