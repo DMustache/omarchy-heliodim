@@ -72,6 +72,17 @@ provides `brightnessctl`. To check the daemon:
 ~/.config/omarchy/plugins/dmustache.heliodim/bin/heliodim status
 ```
 
+## Uninstall
+
+```sh
+omarchy plugin remove dmustache.heliodim
+```
+
+Omarchy disables the plugin and removes its bundled daemon. Your config and
+hand-change log remain in `~/.config/heliodim` and
+`~/.local/state/heliodim`; remove those directories too if you want to erase
+your settings and history.
+
 ## Build from source with Mise
 
 The project pins Zig 0.17.0 in `mise.toml`:
