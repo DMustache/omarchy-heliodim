@@ -253,9 +253,9 @@ pre.code .c { color: var(--muted); }
   </section>
 
   <section id="panel">
-    <h2>Panel (in progress)</h2>
+    <h2>The panel</h2>
     <div class="stage">
-      <div class="panel" role="group" aria-label="heliodim panel preview">
+      <div class="panel" role="group" aria-label="heliodim panel">
         <div class="hero">
           <div class="mark px" id="hero-mark"></div>
           <div>
@@ -280,10 +280,10 @@ pre.code .c { color: var(--muted); }
         </div>
       </div>
       <div class="notes">
-        <p>A left click on the bar icon will open this panel.</p>
+        <p>A left click on the bar icon opens this panel.</p>
         <p><b>Sky</b> plots today's sun from midnight to midnight. The part above the horizon is the day, the dot is now, and the ticks mark sunrise, noon and sunset.</p>
         <p><b>Brightness</b> is the value on screen. The thin accent mark on the meter is where the sun curve alone would put it, and the gap between them is your offset.</p>
-        <p><b>Pause</b> hands brightness back to you until the next sunrise or sunset. <b>Forget offset</b> returns to the plain curve.</p>
+        <p><b>Pause</b>, or a middle click on the icon, leaves brightness to you until the next sunrise or sunset. <b>Forget offset</b> returns to the plain curve. In a terminal: <code>heliodim pause</code>, <code>heliodim reset</code>.</p>
         <p class="example">The offset and its note are demo values.</p>
       </div>
     </div>
@@ -302,9 +302,9 @@ pre.code .c { color: var(--muted); }
 
   <section id="install">
     <h2>Install</h2>
-    <p>Needs Zig 0.17 to build and <code>brightnessctl</code> to run, which Omarchy already ships. Built-in laptop screens only for now.</p>
-    <pre class="code"><code>git clone https://github.com/DMustache/omarchy-heliodim
-cd omarchy-heliodim
+    <p>The repo is both the bar plugin and the daemon's source, so one clone serves both. Needs Zig 0.17 to build and <code>brightnessctl</code> to run, which Omarchy already ships. Built-in laptop screens only for now.</p>
+    <pre class="code"><code>omarchy plugin add https://github.com/DMustache/omarchy-heliodim --enable
+cd ~/.config/omarchy/plugins/dmustache.heliodim
 zig build -Drelease --prefix ~/.local
 install -Dm644 systemd/heliodim.service ~/.config/systemd/user/heliodim.service
 systemctl --user enable --now heliodim</code></pre>
