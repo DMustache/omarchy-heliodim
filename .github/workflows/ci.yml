@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: zig build test
+      - run: zig build -Drelease
+      - run: ls -l zig-out/bin/heliodim
+
+  art:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SVGs match the pixel maps in assets/gen.py
+        run: python3 -I assets/gen.py && git diff --exit-code assets

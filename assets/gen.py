@@ -1,0 +1,179 @@
+"""heliodim pixel art: one source for the logo, the bar sun states and the site.
+
+Each map is rows of '#' (filled) and '.' (empty). One cell is one pixel at
+the bar's 12px icon size, and one 15-unit block in the logo (the grid the
+Omarchy wordmark is drawn on).
+
+    python3 assets/gen.py    # writes assets/*.svg and site/dist/index.html
+"""
+import json, os
+
+ASSETS = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(ASSETS)
+
+H = "############"  # horizon, always row 10 of the 12x12 bar icon
+
+# Bar icon, morning side. Evening states are these mirrored.
+STATES = [
+    ("night", "below −6°", [
+        "............",
+        "............",
+        "..#.........",
+        ".###.....#..",
+        "..#.........",
+        "............",
+        "......#.....",
+        "............",
+        "............",
+        "............",
+        H,
+        "............",
+    ]),
+    ("twilight", "−6° … 0°", [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "..####......",
+        H,
+        "............",
+    ]),
+    ("horizon", "0° … 4°", [
+        "............",
+        "............",
+        "............",
+        "............",
+        "...#........",
+        "#.....#.....",
+        "............",
+        "..####......",
+        ".######.....",
+        ".######.....",
+        H,
+        "............",
+    ]),
+    ("low", "4° … 15°", [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "..##........",
+        ".####.......",
+        ".####.......",
+        "..##........",
+        "............",
+        H,
+        "............",
+    ]),
+    ("mid", "15° … 35°", [
+        "............",
+        "............",
+        "...##.......",
+        "..####......",
+        "..####......",
+        "...##.......",
+        "............",
+        "............",
+        "............",
+        "............",
+        H,
+        "............",
+    ]),
+    ("high", "35° … 65°", [
+        ".....##.....",
+        "............",
+        ".....##.....",
+        "....####....",
+        "..#.####.#..",
+        ".....##.....",
+        "............",
+        ".....##.....",
+        "............",
+        "............",
+        H,
+        "............",
+    ]),
+    ("zenith", "65° … 90°", [
+        ".#...##...#.",
+        "............",
+        "....####....",
+        "...######...",
+        "##.######.##",
+        "...######...",
+        "....####....",
+        "............",
+        ".#...##...#.",
+        "............",
+        H,
+        "............",
+    ]),
+]
+
+# The mark: a stepped arch (the sky and the dial face) over a solid ground
+# line, a gnomon standing on it, and the shadow it throws.
+LOGO = [
+    "................",
+    ".....######.....",
+    "...##########...",
+    "..###......###..",
+    ".###...#....###.",
+    ".##....##....##.",
+    "##.....###....##",
+    "##.#...####...##",
+    "##..#..#####..##",
+    "##...#.######.##",
+    "################",
+    "################",
+]
+
+
+def svg(rows, cell, color="currentColor", pad=0):
+    w, h = len(rows[0]), len(rows)
+    rects = []
+    for y, row in enumerate(rows):
+        x = 0
+        while x < w:
+            if row[x] == "#":
+                x0 = x
+                while x < w and row[x] == "#":
+                    x += 1
+                rects.append(f'<rect x="{x0*cell+pad}" y="{y*cell+pad}" width="{(x-x0)*cell}" height="{cell}"/>')
+            else:
+                x += 1
+    W, Hh = w * cell + 2 * pad, h * cell + 2 * pad
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {Hh}" width="{W}" height="{Hh}" '
+            f'fill="{color}" shape-rendering="crispEdges">' + "".join(rects) + "</svg>")
+
+
+def mirror(rows):
+    return [r[::-1] for r in rows]
+
+
+def main():
+    for rows in [r for _, _, r in STATES] + [LOGO]:
+        assert len({len(r) for r in rows}) == 1, rows
+    os.makedirs(f"{ASSETS}/sun", exist_ok=True)
+    logo = svg(LOGO, 15)
+    open(f"{ASSETS}/logo.svg", "w").write(logo + "\n")
+    art = {"states": [], "logo": logo}
+    for name, label, rows in STATES:
+        pair = {"am": svg(rows, 1), "pm": svg(mirror(rows), 1)}
+        for side, text in pair.items():
+            open(f"{ASSETS}/sun/{name}-{side}.svg", "w").write(text + "\n")
+        art["states"].append({"name": name, "label": label, **pair})
+
+    page = open(f"{ROOT}/site/index.template.html").read()
+    favicon = "data:image/svg+xml," + svg(LOGO, 15, "#ffcead").replace("#", "%23").replace('"', "'")
+    page = page.replace("/*ART*/null", json.dumps(art)).replace("__FAVICON__", favicon)
+    os.makedirs(f"{ROOT}/site/dist", exist_ok=True)
+    open(f"{ROOT}/site/dist/index.html", "w").write(page)
+
+
+if __name__ == "__main__":
+    main()
