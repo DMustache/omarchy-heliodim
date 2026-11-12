@@ -53,34 +53,38 @@ step = 1      # % per change
 device = amdgpu_bl1
 ```
 
-## Mise
+## Install
 
-The project pins Zig 0.17.0 in `mise.toml`. Install it and run the tests with:
+On Omarchy, add and enable the plugin:
+
+If you installed an earlier systemd service, first run
+`systemctl --user disable --now heliodim`.
+
+```sh
+omarchy plugin add https://github.com/DMustache/omarchy-heliodim --enable
+```
+
+The plugin includes static Linux binaries for x86_64 and aarch64 and starts the
+right one automatically. You need no Zig or separate installer; Omarchy already
+provides `brightnessctl`. To check the daemon:
+
+```sh
+~/.config/omarchy/plugins/dmustache.heliodim/bin/heliodim status
+```
+
+## Build from source with Mise
+
+The project pins Zig 0.17.0 in `mise.toml`:
 
 ```sh
 mise install
 mise exec -- zig build test
+mise exec -- zig build -Drelease
 ```
 
-With mise activated in your shell, the `zig build` command below uses that
-version too.
-
-## Install
-
-The repo is both the Omarchy bar plugin and the daemon's source, so one clone
-serves both:
-
-```sh
-omarchy plugin add https://github.com/DMustache/omarchy-heliodim --enable
-cd ~/.config/omarchy/plugins/dmustache.heliodim
-zig build -Drelease --prefix ~/.local
-install -Dm644 systemd/heliodim.service ~/.config/systemd/user/heliodim.service
-systemctl --user enable --now heliodim
-heliodim status
-journalctl --user -u heliodim
-```
-
-Without the bar, the last four lines from any clone are enough.
+Pushing a `v*` tag creates a GitHub release with both Linux binaries and their
+SHA-256 checksums. CI checks that the binaries bundled in the plugin match the
+source builds.
 
 ## Bar widget
 
@@ -101,8 +105,8 @@ change; the widget reads it and computes the sun itself with the same
 formula. The same controls work from a terminal:
 
 ```sh
-heliodim pause    # until the next sunrise or sunset; again to resume
-heliodim reset    # forget your offset
+~/.config/omarchy/plugins/dmustache.heliodim/bin/heliodim pause  # until the next sunrise or sunset; again to resume
+~/.config/omarchy/plugins/dmustache.heliodim/bin/heliodim reset  # forget your offset
 ```
 
 ## Art and site
