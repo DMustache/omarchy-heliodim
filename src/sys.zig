@@ -106,3 +106,37 @@ pub fn poll(fds: []linux.pollfd, timeout_ms: i32) Error!usize {
         else => e,
     };
 }
+
+/// Blocks `sigs` and returns a descriptor that reads them, so signals arrive
+/// through poll() alongside everything else instead of interrupting it.
+pub fn signalsCreate(sigs: []const linux.SIG) Error!fd_t {
+    var set = linux.sigemptyset();
+    for (sigs) |s| linux.sigaddset(&set, s);
+    _ = try check(linux.sigprocmask(linux.SIG.BLOCK, &set, null));
+    return @intCast(try check(linux.signalfd(-1, &set, linux.SFD.CLOEXEC | linux.SFD.NONBLOCK)));
+}
+
+/// The next pending signal number from a signalfd, or null when none is left.
+pub fn signalRead(fd: fd_t) ?u32 {
+    var info: linux.signalfd_siginfo = undefined;
+    const rc = linux.read(fd, @ptrCast(&info), @sizeOf(linux.signalfd_siginfo));
+    if (linux.errno(rc) != .SUCCESS or rc != @sizeOf(linux.signalfd_siginfo)) return null;
+    return info.signo;
+}
+
+pub fn kill(pid: linux.pid_t, sig: linux.SIG) Error!void {
+    _ = try check(linux.kill(pid, sig));
+}
+
+/// Replaces a small file's contents in place. Readers watching the file see
+/// the same inode change; one that lands between truncate and write reads an
+/// empty file and should keep what it had.
+pub fn writeFile(path: [:0]const u8, bytes: []const u8) Error!void {
+    const fd = try open(path, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644);
+    defer close(fd);
+    try writeAll(fd, bytes);
+}
+
+pub fn unlink(path: [:0]const u8) void {
+    _ = linux.unlink(path);
+}
