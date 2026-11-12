@@ -7,7 +7,7 @@ python3 -I assets/gen.py
 dir=$(mktemp -d)
 trap 'git worktree remove --force "$dir" 2>/dev/null || true; rm -rf "$dir"' EXIT
 if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
-  git fetch -q origin gh-pages
+  git fetch -q origin +refs/heads/gh-pages:refs/remotes/origin/gh-pages
   git worktree add -q "$dir" origin/gh-pages --detach
 else
   git worktree add -q --detach "$dir"
