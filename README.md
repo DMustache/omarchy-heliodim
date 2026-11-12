@@ -53,6 +53,18 @@ step = 1      # % per change
 device = amdgpu_bl1
 ```
 
+## Mise
+
+The project pins Zig 0.17.0 in `mise.toml`. Install it and run the tests with:
+
+```sh
+mise install
+mise exec -- zig build test
+```
+
+With mise activated in your shell, the `zig build` command below uses that
+version too.
+
 ## Install
 
 ```sh
