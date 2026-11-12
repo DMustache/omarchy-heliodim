@@ -128,3 +128,7 @@ It writes `assets/logo.svg`, `assets/sun/*.svg`, `widget/Art.js` and the site pa
 `site/publish.sh` builds the page and pushes it to the `gh-pages` branch;
 the `pages` workflow runs it on every push to `main` that touches `assets/` or `site/`.
 The `ci` workflow builds and tests the binary on every push and pull request.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
